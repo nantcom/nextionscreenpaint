@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29728.190
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestNextionDraw", "TestNextionDraw\TestNextionDraw.csproj", "{B043B3C0-521A-4914-A435-C42EEA431926}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Debug|x64.ActiveCfg = Debug|x64
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Debug|x64.Build.0 = Debug|x64
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Release|x64.ActiveCfg = Release|x64
+		{B043B3C0-521A-4914-A435-C42EEA431926}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CF513916-5D9E-459E-A67D-F9697C46CDC9}
+	EndGlobalSection
+EndGlobal
