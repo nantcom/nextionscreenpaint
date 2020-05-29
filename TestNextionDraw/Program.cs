@@ -322,7 +322,7 @@ namespace TestNextionDraw
             ManualResetEvent waitForBuffer = new ManualResetEvent(false);
             ManualResetEvent waitForDone = new ManualResetEvent(false);
 
-            int bufferSize = 1000;
+            int bufferSize = 500;
 
             send("cls 0");
             send("bkcmd=0");
@@ -396,9 +396,9 @@ namespace TestNextionDraw
             MemoryStream colorData = new MemoryStream();
             MemoryStream baseFrame = new MemoryStream();
 
-            int scaleDown = 8;
+            int scaleDown = 2;
 
-            using (MagickImageCollection collection = new MagickImageCollection(@"D:\Projects\TestNextionDraw\test.gif"))
+            using (MagickImageCollection collection = new MagickImageCollection(@"D:\Projects\TestNextionDraw\test11.gif"))
             {
                 // This will remove the optimization and change the image to how it looks at that point
                 // during the animation. More info here: http://www.imagemagick.org/Usage/anim_basics/#coalesce
@@ -509,6 +509,7 @@ namespace TestNextionDraw
             send("x.val=0");
             send("y.val=0");
             send("scale.val=" + scaleDown);
+            send("tm0.tim=100"); // base frame
             send("tm0.en=1"); // base frame
             send("recmod=1");
 
@@ -538,6 +539,7 @@ namespace TestNextionDraw
             send("tm0.en=0");
             send("x.val=0"); // re-sync position
             send("y.val=0");
+            send("tm1.tim=125");
             send("tm1.en=1"); // begin diff frame drawing
             send("recmod=1");
 
@@ -722,6 +724,238 @@ namespace TestNextionDraw
             send("x.val=0");
             send("y.val=0");
             send("scale.val=" + scaleDown);
+            send("tm0.tim=100");
+            send("tm0.en=1"); // base frame
+            send("recmod=1");
+
+            Task.Delay(250).Wait();
+
+            // send base frame
+            baseFrame.Position = 0;
+            while (true)
+            {
+                var buffer = new byte[bufferSize];
+                var read = baseFrame.Read(buffer, 0, buffer.Length);
+
+                waitForPaint.Reset();
+                port.Write(buffer, 0, read);
+
+                waitForPaint.WaitOne(); // Nextion must return 0x9e
+
+                if (read < buffer.Length) // back to start
+                {
+                    break;
+                }
+            }
+
+            Task.Delay(250).Wait();
+
+            send("DRAKJHSUYDGBNCJHGJKSHBDN"); // restart interactive mode
+            send("tm0.en=0");
+            send("x.val=0"); // re-sync position
+            send("y.val=0");
+            send("tm1.tim=125");
+            send("tm1.en=1"); // begin diff frame drawing
+            send("recmod=1");
+
+            Task.Delay(250).Wait();
+
+            //// send diff frame
+            Task.Run(() =>
+            {
+                colorData.Position = 0;
+                while (true)
+                {
+                    var buffer = new byte[bufferSize];
+                    var read = colorData.Read(buffer, 0, buffer.Length);
+
+                    waitForPaint.Reset();
+                    port.Write(buffer, 0, read);
+
+                    waitForPaint.WaitOne(); // Nextion must return 0x9e
+
+                    if (read < buffer.Length) // back to start
+                    {
+                        colorData.Position = 0;
+                    }
+                }
+            });
+        }
+
+        private static void GifReparseModeOpti3(SerialPort port)
+        {
+            Action<string> send = (cmd) =>
+            {
+                var bytes = System.Text.Encoding.ASCII.GetBytes(cmd + "AAA");
+                bytes[bytes.Length - 1] = 255;
+                bytes[bytes.Length - 2] = 255;
+                bytes[bytes.Length - 3] = 255;
+
+                port.Write(bytes, 0, bytes.Length);
+            };
+
+            Action<Stream, ushort> writeData = (s, u) =>
+            {
+                var buffer = BitConverter.GetBytes(u);
+                s.Write(buffer, 0, buffer.Length);
+            };
+
+
+            MemoryStream colorData = new MemoryStream();
+            MemoryStream baseFrame = new MemoryStream();
+
+            int scaleDown = 2;
+
+            using (MagickImageCollection collection = new MagickImageCollection(@"D:\Projects\TestNextionDraw\test11.gif"))
+            {
+                // This will remove the optimization and change the image to how it looks at that point
+                // during the animation. More info here: http://www.imagemagick.org/Usage/anim_basics/#coalesce
+                collection.Coalesce();
+
+
+                int[,] previousFrame = new int[320 / scaleDown, 240 / scaleDown];
+
+                var resize = new MagickGeometry() { FillArea = true, Height = 240 / scaleDown };
+                var area = new MagickGeometry() { FillArea = true, Width = 320 / scaleDown, Height = 240 / scaleDown };
+
+                //// first pass - paint every frame to get final image of last frame in previousFrame array
+                foreach (MagickImage image in collection)
+                {
+                    image.Resize(resize);
+                    image.Crop(area, Gravity.Center);
+
+                    var pixels = image.GetPixels();
+
+                    for (int y = 0; y < image.Height; y++)
+                    {
+                        for (int x = 0; x < image.Width; x++)
+                        {
+                            var pixel = pixels[x, y].ToColor();
+
+                            var r = Math.Min(31, Math.Round((pixel.R / 255d) * 32)); // 5 bit = 32 values
+                            var g = Math.Min(63, Math.Round((pixel.G / 255d) * 64)); // 6 bit = 64 values
+                            var b = Math.Min(31, Math.Round((pixel.B / 255d) * 32)); // 5 bit = 32 values
+
+                            int rgb565 = ((byte)r << 11) | ((byte)g << 5) | (byte)b;
+                            previousFrame[x, y] = rgb565;
+                        }
+                    }
+                }
+
+                // build base frame data
+                for (int y = 0; y < area.Height; y++)
+                {
+                    for (int x = 0; x < area.Width; x++)
+                    {
+                        writeData(baseFrame, (ushort)previousFrame[x, y]);
+                    }
+                }
+
+                int index = 0;
+
+                //second pass - actually get pixel data as difference from previous frame
+                //the first frame will also contain only difference
+                foreach (MagickImage image in collection)
+                {
+                    var pixels = image.GetPixels();
+
+                    for (int y = 0; y < image.Height; y++)
+                    {
+                        var evenFrame = index % 2 == 0;
+                        var evenLine = y % 2 == 0;
+
+                        if (evenFrame)
+                        {
+                            if (!evenLine)
+                            {
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            if (evenLine)
+                            {
+                                continue;
+                            }
+                        }
+
+                        for (int x = 0; x < image.Width; x++)
+                        {
+                            var evenCol = x % 2 == 0;
+
+                            if (evenFrame)
+                            {
+                                if (!evenCol)
+                                {
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                if (evenCol)
+                                {
+                                    continue;
+                                }
+                            }
+
+                            var pixel = pixels[x, y].ToColor();
+
+                            var r = Math.Min(31, Math.Round((pixel.R / 255d) * 32)); // 5 bit = 32 values
+                            var g = Math.Min(63, Math.Round((pixel.G / 255d) * 64)); // 6 bit = 64 values
+                            var b = Math.Min(31, Math.Round((pixel.B / 255d) * 32)); // 5 bit = 32 values
+
+                            int rgb565 = ((byte)r << 11) | ((byte)g << 5) | (byte)b;
+
+                            if (previousFrame[x, y] != rgb565)
+                            {
+                                writeData(colorData, (ushort)x);
+                                writeData(colorData, (ushort)y);
+                                writeData(colorData, (ushort)rgb565);
+                            }
+
+                            previousFrame[x, y] = rgb565;
+
+                        }
+                    }
+
+                    index++;
+
+                }
+
+            }
+
+            ManualResetEvent waitForPaint = new ManualResetEvent(false);
+            ManualResetEvent waitForBuffer = new ManualResetEvent(false);
+            ManualResetEvent waitForDone = new ManualResetEvent(false);
+
+            int bufferSize = 480;
+
+            // clear current receive buffer
+            port.DiscardInBuffer();
+
+            // wait for our own return data signal
+            port.DataReceived += (s, e) =>
+            {
+                while (port.BytesToRead > 0)
+                {
+                    var cmd = port.ReadByte();
+                    if (cmd == 0x9e)
+                    {
+                        waitForPaint.Set();
+                    }
+
+                    if (cmd == 0x9f)
+                    {
+                        waitForDone.Set();
+                    }
+                }
+            };
+
+            send("cls 0");
+            send("bkcmd=0");
+            send("x.val=0");
+            send("y.val=0");
+            send("scale.val=" + scaleDown);
             send("tm0.en=1"); // base frame
             send("recmod=1");
 
@@ -793,9 +1027,9 @@ namespace TestNextionDraw
 
             //GifReparseMode(port);
 
-            //GifReparseModeOpti(port);
+            GifReparseModeOpti(port);
 
-            GifReparseModeOpti2(port);
+            //GifReparseModeOpti3(port);
 
             Console.Read();
 
